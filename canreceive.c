@@ -21,14 +21,17 @@ int main(int argc, char **argv)
 
 	printf("CAN Sockets Receive Demo\r\n");
 
+	// socket creation
 	if ((s = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
 		perror("Socket");
 		return 1;
 	}
 
+	// acquisition of interface index for "vcan0"
 	strcpy(ifr.ifr_name, "vcan0" );
 	ioctl(s, SIOCGIFINDEX, &ifr);
 
+	// binding a socket to the CAN interface
 	memset(&addr, 0, sizeof(addr));
 	addr.can_family = AF_CAN;
 	addr.can_ifindex = ifr.ifr_ifindex;
@@ -38,7 +41,8 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	nbytes = read(s, &frame, sizeof(struct can_frame));
+	// reading a single byte
+	nbytes = read(s, &frame, sizeof(struct can_frame)); // blocks until a frame is available
 
  	if (nbytes < 0) {
 		perror("Read");
