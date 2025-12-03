@@ -12,6 +12,7 @@
 #include <linux/can/raw.h>
 
 #include <signal.h>
+#include <errno.h>
 
 static volatile int running = 1;
 
@@ -48,25 +49,30 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	// setting up filter
+	// message filter setup
 	struct can_filter rfilter[1];
 
 	rfilter[0].can_id   = 0x550;
 	rfilter[0].can_mask = 0xFF0;
-	//rfilter[1].can_id   = 0x200;
-	//rfilter[1].can_mask = 0x700;
 
 	setsockopt(s, SOL_CAN_RAW, CAN_RAW_FILTER, &rfilter, sizeof(rfilter));
 
-	// reading loop
-	signal(SIGINT, sigint_handler);
-	signal(SIGTERM, sigint_handler);
+	// interupt signal handler setup
+	struct sigaction sa;
 
+  sa.sa_handler = sigint_handler; // interupt signal handler
+  sigemptyset(&sa.sa_mask);       // block no additional signals
+  sa.sa_flags = 0;                // do not restart after receiving signal
+
+  sigaction(SIGINT, &sa, NULL);
+  sigaction(SIGTERM, &sa, NULL);
+
+	// reading loop
 	while (running) {
 		int nbytes = read(s, &frame, sizeof(struct can_frame)); // blocks until a frame is available
 
 		if (nbytes < 0) {
-			if (!running) break;
+			if (errno == EINTR && !running) break;
 			perror("Read");
 			return 1;
 		}
