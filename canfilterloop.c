@@ -1,6 +1,4 @@
-
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -17,45 +15,45 @@
 static volatile int running = 1;
 
 void sigint_handler(int signo) {
-    running = 0;   // tell the loop to stop
+    running = 0;
 }
 
 int main(int argc, char **argv)
 {
-	int s, i; 
-	struct sockaddr_can addr;
-	struct ifreq ifr;
-	struct can_frame frame;
-
 	printf("CAN Sockets Receive Filter Demo\r\n");
 
 	// socket creation
-	if ((s = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
+	int sockfd = socket(PF_CAN, SOCK_RAW, CAN_RAW);
+	if (sockfd < 0) {
 		perror("Socket");
 		return 1;
 	}
 
 	// acquisition of interface index for "vcan0"
+	struct ifreq ifr;
+
 	strcpy(ifr.ifr_name, "vcan0" );
-	ioctl(s, SIOCGIFINDEX, &ifr);
+	ioctl(sockfd, SIOCGIFINDEX, &ifr);
 
 	// binding a socket to the CAN interface
+	struct sockaddr_can addr;
+
 	memset(&addr, 0, sizeof(addr));
 	addr.can_family = AF_CAN;
 	addr.can_ifindex = ifr.ifr_ifindex;
 
-	if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+	if (bind(sockfd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
 		perror("Bind");
 		return 1;
 	}
 
-	// message filter setup
-	struct can_filter rfilter[1];
+	// message filter setup (can be an array)
+	struct can_filter rfilter;
 
-	rfilter[0].can_id   = 0x550;
-	rfilter[0].can_mask = 0xFF0;
+	rfilter.can_id   = 0x550;
+	rfilter.can_mask = 0xFF0;
 
-	setsockopt(s, SOL_CAN_RAW, CAN_RAW_FILTER, &rfilter, sizeof(rfilter));
+	setsockopt(sockfd, SOL_CAN_RAW, CAN_RAW_FILTER, &rfilter, sizeof(rfilter));
 
 	// interupt signal handler setup
 	struct sigaction sa;
@@ -64,12 +62,14 @@ int main(int argc, char **argv)
   sigemptyset(&sa.sa_mask);       // block no additional signals
   sa.sa_flags = 0;                // do not restart after receiving signal
 
-  sigaction(SIGINT, &sa, NULL);
-  sigaction(SIGTERM, &sa, NULL);
+  sigaction(SIGINT, &sa, NULL);   // install handler for SIGINT
+  sigaction(SIGTERM, &sa, NULL);  // install handler for SIGTERM
 
 	// reading loop
 	while (running) {
-		int nbytes = read(s, &frame, sizeof(struct can_frame)); // blocks until a frame is available
+		struct can_frame frame;
+
+		int nbytes = read(sockfd, &frame, sizeof(struct can_frame)); // blocks until a frame is available
 
 		if (nbytes < 0) {
 			if (errno == EINTR && !running) break;
@@ -79,13 +79,13 @@ int main(int argc, char **argv)
 
 		printf("0x%03X [%d] ",frame.can_id, frame.can_dlc);
 
-		for (i = 0; i < frame.can_dlc; i++)
+		for (int i = 0; i < frame.can_dlc; i++)
 			printf("%02X ",frame.data[i]);
 
 		printf("\r\n");
 	}
 
-	if (close(s) < 0) {
+	if (close(sockfd) < 0) {
 		perror("Close");
 		return 1;
 	}
